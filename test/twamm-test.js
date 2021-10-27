@@ -15,7 +15,7 @@ describe("TWAMM", function () {
 
     const blockInterval = 10;
 
-    const initialLiquidityProvided = ethers.utils.parseUnits("10000"); //10,000
+    const initialLiquidityProvided = ethers.utils.parseUnits("100"); //10,000
     const ERC20Supply = ethers.utils.parseUnits("100000"); //100,000
     
     beforeEach(async function () {
@@ -171,7 +171,7 @@ describe("TWAMM", function () {
 
             it("Orders in both pools work as expected", async function () {
 
-                const amountIn = ethers.BigNumber.from(1000000);
+                const amountIn =  ethers.utils.parseUnits("0.1");
                 await tokenA.transfer(addr1.address, amountIn);
                 await tokenB.transfer(addr2.address, amountIn);
                 
@@ -182,7 +182,6 @@ describe("TWAMM", function () {
                 //trigger long term orders
                 await twamm.connect(addr1).longTermSwapFromAToB(amountIn, 2);
                 await twamm.connect(addr2).longTermSwapFromBToA(amountIn, 2);
-
 
                 //move blocks forward, and execute virtual orders
                 await mineBlocks(3 * blockInterval)

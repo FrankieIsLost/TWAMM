@@ -211,10 +211,10 @@ library LongTermOrdersLib {
             int256 bIn = int256(tokenBIn).fromInt();
             int256 aStart = int256(tokenAStart).fromInt();
             int256 bStart = int256(tokenBStart).fromInt();
-            int256 k = int256(tokenAStart * tokenBStart).fromInt();
+            int256 k = aStart.mul(bStart);
 
             int256 c = computeC(aStart, bStart, aIn, bIn);
-            int256 endA = computeAmmEndTokenA(aIn, bIn, c, k);
+            int256 endA = computeAmmEndTokenA(aIn, bIn, c, k, aStart, bStart);
             int256 endB = aStart.div(endA).mul(bStart);
 
             int256 outA = aStart + aIn - endA;
@@ -228,20 +228,22 @@ library LongTermOrdersLib {
 
     //helper function for TWAMM formula computation, helps avoid stack depth errors
     function computeC(int256 tokenAStart, int256 tokenBStart, int256 tokenAIn, int256 tokenBIn) private pure returns (int256 c) {
-        int256 c1 = tokenAStart.mul(tokenBIn).sqrt();
-        int256 c2 = tokenBStart.mul(tokenAIn).sqrt();
+        int256 c1 = tokenAStart.sqrt().mul(tokenBIn.sqrt());
+        int256 c2 = tokenBStart.sqrt().mul(tokenAIn.sqrt());
         int256 cNumerator = c1 - c2;
         int256 cDenominator = c1 + c2;
         c = cNumerator.div(cDenominator);
     }
 
     //helper function for TWAMM formula computation, helps avoid stack depth errors
-    function computeAmmEndTokenA(int256 tokenAIn, int256 tokenBIn, int256 c, int256 k) private pure returns (int256 ammEndTokenA) {
-        int256 x1 = tokenAIn.mul(tokenBIn).div(k).sqrt().mul(PRBMathSD59x18.fromInt(2)).exp();
-        int256 xNumerator = x1 + c;
-        int256 xDenominator = x1 - c;
+    function computeAmmEndTokenA(int256 tokenAIn, int256 tokenBIn, int256 c, int256 k, int256 aStart, int256 bStart) private pure returns (int256 ammEndTokenA) {
+        //rearranged for numerical stability
+        int256 eNumerator = PRBMathSD59x18.fromInt(4).mul(tokenAIn).mul(tokenBIn).sqrt();
+        int256 eDenominator = aStart.sqrt().mul(bStart.sqrt()).inv();
+        int256 exponent = eNumerator.mul(eDenominator).exp();
+        int256 fraction = (exponent + c).div(exponent - c);
         int256 scaling = k.div(tokenBIn).sqrt().mul(tokenAIn.sqrt());
-        ammEndTokenA = scaling.div(xDenominator).mul(xNumerator);
+        ammEndTokenA = fraction.mul(scaling);
     }
   
 }
