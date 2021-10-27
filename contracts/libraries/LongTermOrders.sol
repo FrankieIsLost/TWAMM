@@ -124,7 +124,7 @@ library LongTermOrdersLib {
     }
 
 
-    ///@notice executes all virtual orders between current lastVirtualOrderBlock and lastVirtualOrderBlock + blockNumberIncrement
+    ///@notice executes all virtual orders between current lastVirtualOrderBlock and blockNumber
     //also handles orders that expire at end of final block. This assumes that no orders expire inside the given interval 
     function executeVirtualTradesAndOrderExpiries(LongTermOrders storage self, mapping(address => uint256) storage reserveMap, uint256 blockNumber) private {
         
