@@ -15,8 +15,8 @@ describe("TWAMM", function () {
 
     const blockInterval = 10;
 
-    const initialLiquidityProvided = ethers.utils.parseUnits("100"); //10,000
-    const ERC20Supply = ethers.utils.parseUnits("100000"); //100,000
+    const initialLiquidityProvided = ethers.BigNumber.from(100000000); //100,000,000
+    const ERC20Supply = ethers.utils.parseUnits("100"); //100,000
     
     beforeEach(async function () {
         
@@ -139,7 +139,7 @@ describe("TWAMM", function () {
 
             it("Single sided long term order behaves like normal swap", async function () {
 
-                const amountInA = ethers.BigNumber.from(1000000);
+                const amountInA = ethers.BigNumber.from(10000); //10,000
                 await tokenA.transfer(addr1.address, amountInA);
                 
                 //expected output
