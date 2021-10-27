@@ -171,7 +171,7 @@ describe("TWAMM", function () {
 
             it("Orders in both pools work as expected", async function () {
 
-                const amountIn =  ethers.utils.parseUnits("0.1");
+                const amountIn = ethers.BigNumber.from(10000);
                 await tokenA.transfer(addr1.address, amountIn);
                 await tokenB.transfer(addr2.address, amountIn);
                 
@@ -194,8 +194,9 @@ describe("TWAMM", function () {
                 const amountABought = await tokenA.balanceOf(addr2.address);
                 const amountBBought = await tokenB.balanceOf(addr1.address);
 
-                //expect quantities to be equal
-                expect(amountABought).to.be.eq(amountBBought)         
+                //pool is balanced, and both orders execute same amount in opposite directions,
+                //so we expect final balances to be roughly equal
+                expect(amountABought).to.be.closeTo(amountBBought, amountIn.div(100))         
             });
 
             

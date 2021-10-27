@@ -20,3 +20,7 @@ The distribution of rewards is done through a modified version of algorithm from
 ### Long term orders
 
 In addition to the order pools, the `LongTermOrders` struct keep the state of the virtual order execution. Most importantly, it keep track of the last block where virtual orders were executed. Before every interaction with the embedded AMM, the state of virtual order execution is brought forward to the present block. We can do this efficiently because only certain blocks are eligible for virtual order expiry. Thus, we can advance the state by a full block interval in a single computation. Crucially, advancing the state of long term order execution is linear only in the number of block intervals since the last interaction with TWAMM, not linear in the number of orders. 
+
+### Fixed Point Math
+
+This implementation uses the [PBRMath Library](https://github.com/hifi-finance/prb-math) for fixed point arithmetic, in order to implement the closed form solution to settling long term trades. Efforts were made to make the computation numerically stable, but there's remaining work to be done here in order to ensure that the computation is correct for the full set of expected inputs. 
