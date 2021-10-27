@@ -195,9 +195,6 @@ describe("TWAMM", function () {
                 const amountABought = await tokenA.balanceOf(addr2.address);
                 const amountBBought = await tokenB.balanceOf(addr1.address);
 
-                console.log("amount A bought", amountABought);
-                console.log("amount B bought", amountBBought);
-
                 //expect quantities to be equal
                 expect(amountABought).to.be.eq(amountBBought)         
             });
