@@ -29,7 +29,7 @@ contract TWAMM is ERC20 {
     /// ---------------------------
 
     ///@notice interval between blocks that are eligible for order expiry 
-    uint256 public constant ORDER_BLOCK_INTERVAL = 10;
+    uint256 public orderBlockInterval;
 
     ///@notice data structure to handle long term orders  
     LongTermOrdersLib.LongTermOrders internal longTermOrders;
@@ -70,12 +70,13 @@ contract TWAMM is ERC20 {
                 ,string memory _symbol
                 ,address _tokenA
                 ,address _tokenB
-                ,uint256 blockInterval
+                ,uint256 _orderBlockInterval
     ) ERC20(_name, _symbol) {
         
         tokenA = _tokenA;
         tokenB = _tokenB;
-        longTermOrders.initialize(_tokenA, _tokenB, block.number, blockInterval);
+        orderBlockInterval = _orderBlockInterval;
+        longTermOrders.initialize(_tokenA, _tokenB, block.number, _orderBlockInterval);
 
     }
 
