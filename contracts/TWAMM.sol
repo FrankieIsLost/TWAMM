@@ -160,7 +160,7 @@ contract TWAMM is ERC20 {
     ///@notice swap a given amount of TokenB against embedded amm 
     function swapFromBToA(uint256 amountBIn) external {
         uint256 amountAOut = performSwap(tokenB, tokenA, amountBIn);
-        emit SwapAToB(msg.sender, amountBIn, amountAOut);
+        emit SwapBToA(msg.sender, amountBIn, amountAOut);
     }
 
     ///@notice create a long term order to swap from tokenB 
