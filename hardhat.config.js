@@ -9,5 +9,13 @@ module.exports = {
             version: "0.8.9"
         }
     ]
+  },
+  networks: {
+    hardhat: {
+      allowUnlimitedContractSize: true,
+      mining: {
+        auto: false,
+      }
+    }
   }
 };

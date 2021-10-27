@@ -24,6 +24,7 @@
     "chai": "^4.3.4",
     "ethereum-waffle": "^3.4.0",
     "ethers": "^5.5.1",
-    "hardhat": "^2.6.7"
+    "hardhat": "^2.6.7",
+    "prb-math": "^2.4.0"
   }
 }
