@@ -2,13 +2,15 @@
 pragma solidity ^0.8.0;
 
 import "hardhat/console.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@rari-capital/solmate/src/tokens/ERC20.sol";
+import "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import "./libraries/LongTermOrders.sol";
 
 ///@notice TWAMM -- https://www.paradigm.xyz/2021/07/twamm/
 contract TWAMM is ERC20 {
     using LongTermOrdersLib for LongTermOrdersLib.LongTermOrders;
     using PRBMathUD60x18 for uint256;
+    using SafeTransferLib for ERC20;
 
     /// ---------------------------
     /// ------ AMM Parameters -----
@@ -65,13 +67,27 @@ contract TWAMM is ERC20 {
     ///@notice An event emitted when proceeds from a long term swap are withdrawm 
     event WithdrawProceedsFromLongTermOrder(address indexed addr, uint256 orderId);
 
+    /// ---------------------------
+    /// --------- Modifiers ----------
+    /// ---------------------------
+    ///@notice reentrancy guard initialized to state
+    uint256 private unlocked = 1;
 
+    ///@notice reentrancy guard
+    modifier lock() {
+        require(unlocked == 1, "locked");
+
+        unlocked = 2; // lock, save gas by not setting to zero
+        _;
+        unlocked = 1; // unlock
+    }
+    
     constructor(string memory _name
                 ,string memory _symbol
                 ,address _tokenA
                 ,address _tokenB
                 ,uint256 _orderBlockInterval
-    ) ERC20(_name, _symbol) {
+    ) ERC20(_name, _symbol, 18) {
         
         tokenA = _tokenA;
         tokenB = _tokenB;
@@ -81,11 +97,8 @@ contract TWAMM is ERC20 {
     }
 
     ///@notice provide initial liquidity to the amm. This sets the relative price between tokens
-    function provideInitialLiquidity(uint256 amountA, uint256 amountB) external {
-        require(totalSupply() == 0, 'liquidity has already been provided, need to call provideLiquidity');
-
-        ERC20(tokenA).transferFrom(msg.sender, address(this), amountA);
-        ERC20(tokenB).transferFrom(msg.sender, address(this), amountB);
+    function provideInitialLiquidity(uint256 amountA, uint256 amountB) external lock {
+        require(totalSupply == 0, 'liquidity has already been provided, need to call provideLiquidity');
 
         reserveMap[tokenA] = amountA;
         reserveMap[tokenB] = amountB;
@@ -94,57 +107,60 @@ contract TWAMM is ERC20 {
         uint256 lpAmount = amountA.fromUint().sqrt().mul(amountB.fromUint().sqrt()).toUint();
         _mint(msg.sender, lpAmount);
 
+        ERC20(tokenA).safeTransferFrom(msg.sender, address(this), amountA);
+        ERC20(tokenB).safeTransferFrom(msg.sender, address(this), amountB);
+
         emit InitialLiquidityProvided(msg.sender, amountA, amountB);
     }
 
     ///@notice provide liquidity to the AMM 
     ///@param lpTokenAmount number of lp tokens to mint with new liquidity  
-    function provideLiquidity(uint256 lpTokenAmount) external {
-        require(totalSupply() != 0, 'no liquidity has been provided yet, need to call provideInitialLiquidity');
+    function provideLiquidity(uint256 lpTokenAmount) external lock {
+        require(totalSupply != 0, 'no liquidity has been provided yet, need to call provideInitialLiquidity');
 
         //execute virtual orders 
         longTermOrders.executeVirtualOrdersUntilCurrentBlock(reserveMap);
 
         //the ratio between the number of underlying tokens and the number of lp tokens must remain invariant after mint 
-        uint256 amountAIn = lpTokenAmount * reserveMap[tokenA] / totalSupply();
-        uint256 amountBIn = lpTokenAmount * reserveMap[tokenB] / totalSupply();
-
-        ERC20(tokenA).transferFrom(msg.sender, address(this), amountAIn);
-        ERC20(tokenB).transferFrom(msg.sender, address(this), amountBIn);
+        uint256 amountAIn = lpTokenAmount * reserveMap[tokenA] / totalSupply;
+        uint256 amountBIn = lpTokenAmount * reserveMap[tokenB] / totalSupply;
 
         reserveMap[tokenA] += amountAIn;
         reserveMap[tokenB] += amountBIn;
 
         _mint(msg.sender, lpTokenAmount);
 
+        ERC20(tokenA).safeTransferFrom(msg.sender, address(this), amountAIn);
+        ERC20(tokenB).safeTransferFrom(msg.sender, address(this), amountBIn);
+        
         emit LiquidityProvided(msg.sender, lpTokenAmount);
     }
 
     ///@notice remove liquidity to the AMM 
     ///@param lpTokenAmount number of lp tokens to burn
-    function removeLiquidity(uint256 lpTokenAmount) external {
-        require(lpTokenAmount <= totalSupply(), 'not enough lp tokens available');
+    function removeLiquidity(uint256 lpTokenAmount) external lock {
+        require(lpTokenAmount <= totalSupply, 'not enough lp tokens available');
 
         //execute virtual orders 
         longTermOrders.executeVirtualOrdersUntilCurrentBlock(reserveMap);
         
         //the ratio between the number of underlying tokens and the number of lp tokens must remain invariant after burn 
-        uint256 amountAOut = reserveMap[tokenA] * lpTokenAmount / totalSupply();
-        uint256 amountBOut = reserveMap[tokenB] * lpTokenAmount / totalSupply();
-
-        ERC20(tokenA).transfer(msg.sender, amountAOut);
-        ERC20(tokenB).transfer(msg.sender, amountBOut);
+        uint256 amountAOut = reserveMap[tokenA] * lpTokenAmount / totalSupply;
+        uint256 amountBOut = reserveMap[tokenB] * lpTokenAmount / totalSupply;
 
         reserveMap[tokenA] -= amountAOut;
         reserveMap[tokenB] -= amountBOut;
 
         _burn(msg.sender, lpTokenAmount);
 
+        ERC20(tokenA).safeTransfer(msg.sender, amountAOut);
+        ERC20(tokenB).safeTransfer(msg.sender, amountBOut);
+
         emit LiquidityRemoved(msg.sender, lpTokenAmount);
     }
 
     ///@notice swap a given amount of TokenA against embedded amm 
-    function swapFromAToB(uint256 amountAIn) external {
+    function swapFromAToB(uint256 amountAIn) external lock {
         uint256 amountBOut = performSwap(tokenA, tokenB, amountAIn);
         emit SwapAToB(msg.sender, amountAIn, amountBOut);
     }
@@ -152,13 +168,13 @@ contract TWAMM is ERC20 {
     ///@notice create a long term order to swap from tokenA 
     ///@param amountAIn total amount of token A to swap 
     ///@param numberOfBlockIntervals number of block intervals over which to execute long term order
-    function longTermSwapFromAToB(uint256 amountAIn, uint256 numberOfBlockIntervals) external {
+    function longTermSwapFromAToB(uint256 amountAIn, uint256 numberOfBlockIntervals) external lock {
         uint256 orderId =  longTermOrders.longTermSwapFromAToB(amountAIn, numberOfBlockIntervals, reserveMap);
         emit LongTermSwapAToB(msg.sender, amountAIn, orderId);
     }
 
     ///@notice swap a given amount of TokenB against embedded amm 
-    function swapFromBToA(uint256 amountBIn) external {
+    function swapFromBToA(uint256 amountBIn) external lock {
         uint256 amountAOut = performSwap(tokenB, tokenA, amountBIn);
         emit SwapBToA(msg.sender, amountBIn, amountAOut);
     }
@@ -166,19 +182,19 @@ contract TWAMM is ERC20 {
     ///@notice create a long term order to swap from tokenB 
     ///@param amountBIn total amount of tokenB to swap 
     ///@param numberOfBlockIntervals number of block intervals over which to execute long term order
-    function longTermSwapFromBToA(uint256 amountBIn, uint256 numberOfBlockIntervals) external {
+    function longTermSwapFromBToA(uint256 amountBIn, uint256 numberOfBlockIntervals) external lock {
         uint256 orderId = longTermOrders.longTermSwapFromBToA(amountBIn, numberOfBlockIntervals, reserveMap);
         emit LongTermSwapBToA(msg.sender, amountBIn, orderId);
     }
 
     ///@notice stop the execution of a long term order 
-    function cancelLongTermSwap(uint256 orderId) external {
+    function cancelLongTermSwap(uint256 orderId) external lock {
         longTermOrders.cancelLongTermSwap(orderId, reserveMap);
         emit CancelLongTermOrder(msg.sender, orderId);
     }
 
     ///@notice withdraw proceeds from a long term swap 
-    function withdrawProceedsFromLongTermSwap(uint256 orderId) external {
+    function withdrawProceedsFromLongTermSwap(uint256 orderId) external lock {
         longTermOrders.withdrawProceedsFromLongTermSwap(orderId, reserveMap);
         emit WithdrawProceedsFromLongTermOrder(msg.sender, orderId);
     }
@@ -195,11 +211,11 @@ contract TWAMM is ERC20 {
         //charge LP fee
         amountOutMinusFee = amountOut * (10000 - LP_FEE) / 10000;
         
-        ERC20(from).transferFrom(msg.sender, address(this), amountIn);  
-        ERC20(to).transfer(msg.sender, amountOutMinusFee);
-
         reserveMap[from] += amountIn;
         reserveMap[to] -= amountOutMinusFee;
+
+        ERC20(from).safeTransferFrom(msg.sender, address(this), amountIn);  
+        ERC20(to).safeTransfer(msg.sender, amountOutMinusFee);
     }
 
     ///@notice get tokenA reserves

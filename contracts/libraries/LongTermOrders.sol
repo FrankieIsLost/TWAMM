@@ -2,7 +2,8 @@
 pragma solidity ^0.8.0;
 
 import "hardhat/console.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@rari-capital/solmate/src/tokens/ERC20.sol";
+import "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
 import "prb-math/contracts/PRBMathSD59x18.sol";
 import "./OrderPool.sol";
 
@@ -11,6 +12,7 @@ import "./OrderPool.sol";
 library LongTermOrdersLib {
     using PRBMathSD59x18 for int256;
     using OrderPoolLib for OrderPoolLib.OrderPool;
+    using SafeTransferLib for ERC20;
 
     ///@notice information associated with a long term order 
     struct Order {
@@ -71,9 +73,6 @@ library LongTermOrdersLib {
     function performLongTermSwap(LongTermOrders storage self, address from, address to, uint256 amount, uint256 numberOfBlockIntervals,  mapping(address => uint256) storage reserveMap) private returns (uint256) {
         //update virtual order state 
         executeVirtualOrdersUntilCurrentBlock(self, reserveMap);
-        
-        // transfer sale amount to contract
-        ERC20(from).transferFrom(msg.sender, address(this), amount);
 
         //determine the selling rate based on number of blocks to expiry and total amount 
         uint256 currentBlock = block.number;
@@ -87,6 +86,10 @@ library LongTermOrdersLib {
 
         //add to order map
         self.orderMap[self.orderId] = Order(self.orderId, orderExpiry, sellingRate, msg.sender, from, to);
+
+        // transfer sale amount to contract
+        ERC20(from).safeTransferFrom(msg.sender, address(this), amount);
+
         return self.orderId++;
     }
 
@@ -103,8 +106,8 @@ library LongTermOrdersLib {
 
         require(unsoldAmount > 0 || purchasedAmount > 0, 'no proceeds to withdraw');
         //transfer to owner
-        ERC20(order.buyTokenId).transfer(msg.sender, purchasedAmount);
-        ERC20(order.sellTokenId).transfer(msg.sender, unsoldAmount);
+        ERC20(order.buyTokenId).safeTransfer(msg.sender, purchasedAmount);
+        ERC20(order.sellTokenId).safeTransfer(msg.sender, unsoldAmount);
     }
 
     ///@notice withdraw proceeds from a long term swap (can be expired or ongoing) 
@@ -120,7 +123,7 @@ library LongTermOrdersLib {
 
         require(proceeds > 0, 'no proceeds to withdraw');
         //transfer to owner
-        ERC20(order.buyTokenId).transfer(msg.sender, proceeds);
+        ERC20(order.buyTokenId).safeTransfer(msg.sender, proceeds);
     }
 
 
