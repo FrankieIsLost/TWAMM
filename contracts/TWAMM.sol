@@ -4,10 +4,11 @@ pragma solidity ^0.8.0;
 import "hardhat/console.sol";
 import "@rari-capital/solmate/src/tokens/ERC20.sol";
 import "@rari-capital/solmate/src/utils/SafeTransferLib.sol";
+import "@rari-capital/solmate/src/utils/ReentrancyGuard.sol";
 import "./libraries/LongTermOrders.sol";
 
 ///@notice TWAMM -- https://www.paradigm.xyz/2021/07/twamm/
-contract TWAMM is ERC20 {
+contract TWAMM is ERC20, ReentrancyGuard {
     using LongTermOrdersLib for LongTermOrdersLib.LongTermOrders;
     using PRBMathUD60x18 for uint256;
     using SafeTransferLib for ERC20;
@@ -67,20 +68,6 @@ contract TWAMM is ERC20 {
     ///@notice An event emitted when proceeds from a long term swap are withdrawm 
     event WithdrawProceedsFromLongTermOrder(address indexed addr, uint256 orderId);
 
-    /// ---------------------------
-    /// --------- Modifiers ----------
-    /// ---------------------------
-    ///@notice reentrancy guard initialized to state
-    uint256 private unlocked = 1;
-
-    ///@notice reentrancy guard
-    modifier lock() {
-        require(unlocked == 1, "locked");
-
-        unlocked = 2; // lock, save gas by not setting to zero
-        _;
-        unlocked = 1; // unlock
-    }
     
     constructor(string memory _name
                 ,string memory _symbol
@@ -97,7 +84,7 @@ contract TWAMM is ERC20 {
     }
 
     ///@notice provide initial liquidity to the amm. This sets the relative price between tokens
-    function provideInitialLiquidity(uint256 amountA, uint256 amountB) external lock {
+    function provideInitialLiquidity(uint256 amountA, uint256 amountB) external nonReentrant {
         require(totalSupply == 0, 'liquidity has already been provided, need to call provideLiquidity');
 
         reserveMap[tokenA] = amountA;
@@ -115,7 +102,7 @@ contract TWAMM is ERC20 {
 
     ///@notice provide liquidity to the AMM 
     ///@param lpTokenAmount number of lp tokens to mint with new liquidity  
-    function provideLiquidity(uint256 lpTokenAmount) external lock {
+    function provideLiquidity(uint256 lpTokenAmount) external nonReentrant {
         require(totalSupply != 0, 'no liquidity has been provided yet, need to call provideInitialLiquidity');
 
         //execute virtual orders 
@@ -138,7 +125,7 @@ contract TWAMM is ERC20 {
 
     ///@notice remove liquidity to the AMM 
     ///@param lpTokenAmount number of lp tokens to burn
-    function removeLiquidity(uint256 lpTokenAmount) external lock {
+    function removeLiquidity(uint256 lpTokenAmount) external nonReentrant {
         require(lpTokenAmount <= totalSupply, 'not enough lp tokens available');
 
         //execute virtual orders 
@@ -160,7 +147,7 @@ contract TWAMM is ERC20 {
     }
 
     ///@notice swap a given amount of TokenA against embedded amm 
-    function swapFromAToB(uint256 amountAIn) external lock {
+    function swapFromAToB(uint256 amountAIn) external nonReentrant {
         uint256 amountBOut = performSwap(tokenA, tokenB, amountAIn);
         emit SwapAToB(msg.sender, amountAIn, amountBOut);
     }
@@ -168,13 +155,13 @@ contract TWAMM is ERC20 {
     ///@notice create a long term order to swap from tokenA 
     ///@param amountAIn total amount of token A to swap 
     ///@param numberOfBlockIntervals number of block intervals over which to execute long term order
-    function longTermSwapFromAToB(uint256 amountAIn, uint256 numberOfBlockIntervals) external lock {
+    function longTermSwapFromAToB(uint256 amountAIn, uint256 numberOfBlockIntervals) external nonReentrant {
         uint256 orderId =  longTermOrders.longTermSwapFromAToB(amountAIn, numberOfBlockIntervals, reserveMap);
         emit LongTermSwapAToB(msg.sender, amountAIn, orderId);
     }
 
     ///@notice swap a given amount of TokenB against embedded amm 
-    function swapFromBToA(uint256 amountBIn) external lock {
+    function swapFromBToA(uint256 amountBIn) external nonReentrant {
         uint256 amountAOut = performSwap(tokenB, tokenA, amountBIn);
         emit SwapBToA(msg.sender, amountBIn, amountAOut);
     }
@@ -182,19 +169,19 @@ contract TWAMM is ERC20 {
     ///@notice create a long term order to swap from tokenB 
     ///@param amountBIn total amount of tokenB to swap 
     ///@param numberOfBlockIntervals number of block intervals over which to execute long term order
-    function longTermSwapFromBToA(uint256 amountBIn, uint256 numberOfBlockIntervals) external lock {
+    function longTermSwapFromBToA(uint256 amountBIn, uint256 numberOfBlockIntervals) external nonReentrant {
         uint256 orderId = longTermOrders.longTermSwapFromBToA(amountBIn, numberOfBlockIntervals, reserveMap);
         emit LongTermSwapBToA(msg.sender, amountBIn, orderId);
     }
 
     ///@notice stop the execution of a long term order 
-    function cancelLongTermSwap(uint256 orderId) external lock {
+    function cancelLongTermSwap(uint256 orderId) external nonReentrant {
         longTermOrders.cancelLongTermSwap(orderId, reserveMap);
         emit CancelLongTermOrder(msg.sender, orderId);
     }
 
     ///@notice withdraw proceeds from a long term swap 
-    function withdrawProceedsFromLongTermSwap(uint256 orderId) external lock {
+    function withdrawProceedsFromLongTermSwap(uint256 orderId) external nonReentrant {
         longTermOrders.withdrawProceedsFromLongTermSwap(orderId, reserveMap);
         emit WithdrawProceedsFromLongTermOrder(msg.sender, orderId);
     }
